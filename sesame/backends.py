@@ -62,9 +62,11 @@ class UrlAuthBackendMixin(object):
         # already, but we hash it again in case it isn't. We default to MD5
         # to minimize the length of the token. (Remember, if an attacker
         # obtains the URL, he can already log in. This isn't high security.)
-        h = crypto.pbkdf2(
-            user.password, self.salt, self.iterations, digest=self.digest)
-        return self.sign(struct.pack(str('!i'), user.pk) + h)
+        h = crypto.pbkdf2(user.password, self.salt, self.iterations, digest=self.digest)
+
+
+        # This change is made if you're using uuids for pks.
+        return self.sign(struct.pack(str('!36s'), str(user.pk).encode()) + h)
 
     def parse_token(self, token):
         """
@@ -79,13 +81,13 @@ class UrlAuthBackendMixin(object):
         except signing.BadSignature:
             logger.debug("Bad token: %s", token)
             return
-        user = self.get_user(*struct.unpack(str('!i'), data[:4]))
+        user = self.get_user(struct.unpack(str('!36s'), data[:36])[0].decode())
         if user is None:
             logger.debug("Unknown token: %s", token)
             return
         h = crypto.pbkdf2(
             user.password, self.salt, self.iterations, digest=self.digest)
-        if not crypto.constant_time_compare(data[4:], h):
+        if not crypto.constant_time_compare(data[36:], h):
             logger.debug("Invalid token: %s", token)
             return
         logger.debug("Valid token for user %s: %s", user, token)
